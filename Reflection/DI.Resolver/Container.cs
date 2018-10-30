@@ -3,6 +3,8 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Reflection;
 using Attributes.Infrastructure;
+using DI.Resolver.Exceptions;
+using DI.Resolver.Resources;
 
 namespace DI.Resolver
 {
@@ -77,38 +79,63 @@ namespace DI.Resolver
         /// </summary>
         /// <param name="type">The type.</param>
         /// <returns>The <see cref="object"/> instance.</returns>
-        public object CreateInstance(Type type)
+        public object Get(Type type)
         {
-            if (IsImportConstructorAttribute(type))
+            var isImportConstructor = IsImportConstructorAttribute(type);
+            var isImport = IsIncludeImportAttribute(type);
+
+            if (isImportConstructor && isImport)
+            {
+                throw new ArgumentOutOfRangeException(Messages.MarkAttributeIssue);
+            }
+
+            if (isImportConstructor)
             {
                 return ImportConstructorAttributeActivator(type);
             }
 
-            if (IsIncludeImportAttribute(type))
+            if (isImport)
             {
                 return ImportAttributeActivator(type);
+            }
+
+            if (_resolverData.ContainsKey(type))
+            {
+                return Activator.CreateInstance(_resolverData[type]);
             }
 
             return null;
         }
 
         /// <summary>
-        /// Create instance.
+        /// Get instance.
         /// </summary>
         /// <typeparam name="T">The type of instance.</typeparam>
         /// <returns>The instance type T.</returns>
-        public T CreateInstance<T>()
+        public T Get<T>()
         {
             var requared = typeof(T);
+            var isImportConstructor = IsImportConstructorAttribute(requared);
+            var isImport = IsIncludeImportAttribute(requared);
 
-            if (IsImportConstructorAttribute(requared))
+            if (isImportConstructor && isImport)
+            {
+                throw new ArgumentOutOfRangeException(Messages.MarkAttributeIssue);
+            }
+
+            if (isImportConstructor)
             {
                 return (T) ImportConstructorAttributeActivator(requared);
             }
 
-            if (IsIncludeImportAttribute(requared))
+            if (isImport)
             {
                 return (T) ImportAttributeActivator(requared);
+            }
+
+            if (_resolverData.ContainsKey(requared))
+            {
+                return (T) Activator.CreateInstance(_resolverData[requared]);
             }
 
             return default(T);
@@ -167,6 +194,10 @@ namespace DI.Resolver
                     {
                         listParametersInstances.Add(CreateParameterInstance(parameterType));
                     }
+                    else
+                    {
+                        throw new UnresolvedDependenciesException(Messages.UnresolvedDependency);
+                    }
                 }
 
                 return constructors[0].Invoke(listParametersInstances.ToArray());
@@ -197,6 +228,10 @@ namespace DI.Resolver
                         if (_resolverData.ContainsKey(propertyType))
                         {
                             propertyInfo.SetValue(outputInstance, Activator.CreateInstance(_resolverData[propertyType]));
+                        }
+                        else
+                        {
+                            throw new UnresolvedDependenciesException(Messages.UnresolvedDependency);
                         }
                     }
 
